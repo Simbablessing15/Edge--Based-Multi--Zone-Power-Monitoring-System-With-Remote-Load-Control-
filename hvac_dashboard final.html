@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>HVAC Monitor — University of Zimbabwe</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.23.0/firebase-app-compat.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.23.0/firebase-database-compat.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg:           #F0F4F8;
+      --surface:      #FFFFFF;
+      --surface2:     #E8EFF7;
+      --border:       #D1DCE8;
+      --text:         #1A2B3C;
+      --text2:        #4A6080;
+      --text3:        #7A90A8;
+      --blue:         #2563EB;
+      --blue-light:   #EFF4FF;
+      --green:        #059669;
+      --green-light:  #ECFDF5;
+      --amber:        #D97706;
+      --amber-light:  #FFFBEB;
+      --red:          #DC2626;
+      --red-light:    #FEF2F2;
+      --teal:         #0891B2;
+      --teal-light:   #ECFEFF;
+      --violet:       #7C3AED;
+      --violet-light: #F5F3FF;
+      --orange:       #EA580C;
+      --orange-light: #FFF7ED;
+    }
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+
+    /* HEADER */
+    header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 32px;height:68px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 2px 12px rgba(0,0,0,0.06);}
+    .header-left{display:flex;align-items:center;gap:14px;}
+    .logo-icon{width:42px;height:42px;background:linear-gradient(135deg,var(--blue),var(--teal));border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;box-shadow:0 4px 12px rgba(37,99,235,0.3);}
+    .header-title h1{font-size:17px;font-weight:700;color:var(--text);letter-spacing:-0.3px;}
+    .header-title p{font-size:11px;color:var(--text3);font-weight:400;margin-top:1px;}
+    .header-right{display:flex;align-items:center;gap:16px;}
+    .live-badge{display:flex;align-items:center;gap:6px;background:var(--green-light);color:var(--green);padding:6px 14px;border-radius:20px;font-size:12px;font-weight:600;border:1px solid #A7F3D0;}
+    .live-dot{width:7px;height:7px;background:var(--green);border-radius:50%;animation:pulse 1.5s infinite;}
+    @keyframes pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:0.5;transform:scale(0.8);}}
+    .header-time{font-family:'DM Mono',monospace;font-size:12px;color:var(--text3);}
+    .alert-bell{position:relative;cursor:pointer;font-size:18px;padding:6px;}
+    .alert-count{position:absolute;top:0;right:0;background:var(--red);color:white;border-radius:50%;width:16px;height:16px;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;}
+
+    /* ALERT BANNER */
+    .alert-banner{display:none;background:var(--red-light);border:1px solid #FCA5A5;border-radius:12px;padding:12px 20px;margin:16px 32px 0;display:none;align-items:center;gap:10px;animation:fadeIn 0.3s ease;}
+    .alert-banner.show{display:flex;}
+    .alert-banner-icon{font-size:18px;}
+    .alert-banner-text{flex:1;font-size:13px;font-weight:500;color:var(--red);}
+    .alert-banner-close{cursor:pointer;color:var(--red);font-size:16px;padding:0 4px;}
+
+    /* LAYOUT */
+    .container{max-width:1440px;margin:0 auto;padding:24px 32px;}
+
+    /* SECTION TITLE */
+    .section-title{font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:14px;display:flex;align-items:center;gap:8px;}
+    .section-title span{font-size:15px;}
+    .section-title::after{content:'';flex:1;height:1px;background:var(--border);}
+
+    /* OVERVIEW GRID */
+    .overview-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:14px;margin-bottom:24px;}
+    .metric-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px 20px;position:relative;overflow:hidden;transition:transform 0.2s,box-shadow 0.2s;cursor:default;}
+    .metric-card:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,0.08);}
+    .metric-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:14px 14px 0 0;}
+    .metric-card.blue::before{background:var(--blue);}
+    .metric-card.green::before{background:var(--green);}
+    .metric-card.amber::before{background:var(--amber);}
+    .metric-card.teal::before{background:var(--teal);}
+    .metric-card.violet::before{background:var(--violet);}
+    .metric-card.orange::before{background:var(--orange);}
+    .metric-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:12px;font-size:16px;}
+    .metric-card.blue .metric-icon{background:var(--blue-light);color:var(--blue);}
+    .metric-card.green .metric-icon{background:var(--green-light);color:var(--green);}
+    .metric-card.amber .metric-icon{background:var(--amber-light);color:var(--amber);}
+    .metric-card.teal .metric-icon{background:var(--teal-light);color:var(--teal);}
+    .metric-card.violet .metric-icon{background:var(--violet-light);color:var(--violet);}
+    .metric-card.orange .metric-icon{background:var(--orange-light);color:var(--orange);}
+    .metric-label{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:5px;}
+    .metric-value{font-family:'DM Mono',monospace;font-size:24px;font-weight:500;color:var(--text);line-height:1;margin-bottom:3px;}
+    .metric-unit{font-size:12px;color:var(--text3);}
+    .metric-sub{font-size:10px;color:var(--text3);margin-top:5px;}
+
+    /* LOAD BAR */
+    .load-bar-wrap{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 24px;margin-bottom:24px;}
+    .load-bar-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+    .load-bar-title{font-size:13px;font-weight:600;color:var(--text2);}
+    .load-bar-pct{font-family:'DM Mono',monospace;font-size:13px;font-weight:600;color:var(--blue);}
+    .load-bar-track{height:10px;background:var(--surface2);border-radius:8px;overflow:hidden;}
+    .load-bar-fill{height:100%;border-radius:8px;background:linear-gradient(90deg,var(--blue),var(--teal));transition:width 1s ease,background 0.5s;}
+    .load-bar-fill.warn{background:linear-gradient(90deg,var(--amber),var(--orange));}
+    .load-bar-fill.danger{background:linear-gradient(90deg,var(--orange),var(--red));}
+    .load-bar-sub{font-size:11px;color:var(--text3);margin-top:6px;display:flex;justify-content:space-between;}
+
+    /* SYSTEM HEALTH */
+    .health-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;}
+    .health-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:12px;}
+    .health-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+    .health-dot.online{background:var(--green);box-shadow:0 0 6px rgba(5,150,105,0.4);}
+    .health-dot.offline{background:var(--red);box-shadow:0 0 6px rgba(220,38,38,0.4);}
+    .health-dot.warn{background:var(--amber);box-shadow:0 0 6px rgba(217,119,6,0.4);}
+    .health-name{font-size:12px;font-weight:600;color:var(--text);}
+    .health-status{font-size:11px;color:var(--text3);margin-top:1px;}
+
+    /* ROOMS */
+    .rooms-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px;}
+    .room-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.04);}
+    .room-header{padding:16px 22px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+    .room-header-left{display:flex;align-items:center;gap:12px;}
+    .room-number{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:white;}
+    .room-1 .room-number{background:linear-gradient(135deg,var(--blue),#1D4ED8);}
+    .room-2 .room-number{background:linear-gradient(135deg,var(--teal),#0369A1);}
+    .room-name{font-size:15px;font-weight:700;color:var(--text);}
+    .room-sub{font-size:11px;color:var(--text3);margin-top:2px;}
+    .room-badges{display:flex;gap:8px;align-items:center;}
+    .badge{padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;border:1px solid;}
+    .badge-occupied{background:var(--green-light);color:var(--green);border-color:#A7F3D0;}
+    .badge-empty{background:var(--surface2);color:var(--text3);border-color:var(--border);}
+    .badge-auto{background:var(--blue-light);color:var(--blue);border-color:#BFDBFE;}
+    .badge-manual{background:var(--amber-light);color:var(--amber);border-color:#FDE68A;}
+    .room-body{padding:18px 22px;}
+    .room-readings{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;}
+    .room-reading{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:11px 14px;}
+    .room-reading-label{font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;}
+    .room-reading-value{font-family:'DM Mono',monospace;font-size:18px;font-weight:500;color:var(--text);}
+    .room-reading-unit{font-size:10px;color:var(--text3);}
+    .last-motion{font-size:11px;color:var(--text3);margin-bottom:12px;padding:8px 12px;background:var(--bg);border-radius:8px;border:1px solid var(--border);}
+    .last-motion strong{color:var(--text2);}
+    .room-controls{display:flex;flex-direction:column;gap:8px;}
+    .control-row{display:flex;align-items:center;justify-content:space-between;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;}
+    .control-left{display:flex;align-items:center;gap:10px;}
+    .control-icon{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;}
+    .control-name{font-size:13px;font-weight:500;color:var(--text);}
+    .control-state{font-size:11px;margin-top:1px;}
+    .toggle{position:relative;width:44px;height:24px;cursor:pointer;}
+    .toggle input{display:none;}
+    .toggle-track{width:44px;height:24px;background:var(--border);border-radius:12px;transition:background 0.2s;position:relative;}
+    .toggle input:checked + .toggle-track{background:var(--green);}
+    .toggle-thumb{position:absolute;top:3px;left:3px;width:18px;height:18px;background:white;border-radius:50%;transition:left 0.2s;box-shadow:0 1px 4px rgba(0,0,0,0.2);}
+    .toggle input:checked ~ .toggle-thumb{left:23px;}
+    .mode-btn{padding:5px 12px;border-radius:8px;font-size:11px;font-weight:600;border:none;cursor:pointer;transition:all 0.2s;font-family:'DM Sans',sans-serif;}
+    .mode-btn.auto{background:var(--blue-light);color:var(--blue);}
+    .mode-btn.manual{background:var(--amber-light);color:var(--amber);}
+
+    /* CHART SECTION */
+    .chart-grid{display:grid;grid-template-columns:2fr 1fr;gap:20px;margin-bottom:24px;}
+    .chart-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px 24px;}
+    .chart-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;}
+    .chart-title{font-size:14px;font-weight:700;color:var(--text);}
+    .chart-sub{font-size:11px;color:var(--text3);margin-top:2px;}
+    .chart-canvas-wrap{position:relative;height:200px;}
+
+    /* DAILY SUMMARY */
+    .summary-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px 24px;}
+    .summary-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;}
+    .summary-sub{font-size:11px;color:var(--text3);margin-bottom:16px;}
+    .summary-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);}
+    .summary-row:last-child{border-bottom:none;}
+    .summary-label{font-size:12px;color:var(--text2);font-weight:500;}
+    .summary-val{font-family:'DM Mono',monospace;font-size:13px;font-weight:600;color:var(--text);}
+    .summary-badge{padding:2px 8px;border-radius:6px;font-size:10px;font-weight:600;}
+
+    /* COST CARD */
+    .cost-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:24px;}
+    .cost-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px 20px;text-align:center;}
+    .cost-icon{font-size:28px;margin-bottom:8px;}
+    .cost-label{font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;}
+    .cost-value{font-family:'DM Mono',monospace;font-size:22px;font-weight:600;color:var(--text);}
+    .cost-unit{font-size:11px;color:var(--text3);}
+    .cost-note{font-size:10px;color:var(--text3);margin-top:5px;}
+
+    /* EXPORT */
+    .export-btn{display:flex;align-items:center;gap:6px;background:var(--blue);color:white;border:none;border-radius:8px;padding:8px 16px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:background 0.2s;text-decoration:none;}
+    .export-btn:hover{background:#1D4ED8;}
+
+    /* FOOTER */
+    footer{text-align:center;padding:20px;font-size:11px;color:var(--text3);border-top:1px solid var(--border);background:var(--surface);margin-top:8px;line-height:1.8;}
+
+    /* ANIMATIONS */
+    @keyframes fadeIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+    .fade-in{animation:fadeIn 0.5s ease forwards;}
+    @keyframes flash{0%{background:#EFF4FF;}100%{background:transparent;}}
+    .val-flash{animation:flash 0.5s ease;}
+
+    /* RESPONSIVE */
+    @media(max-width:1100px){.overview-grid{grid-template-columns:repeat(3,1fr);}.chart-grid{grid-template-columns:1fr;}.cost-grid{grid-template-columns:1fr 1fr;}}
+    @media(max-width:768px){.overview-grid{grid-template-columns:repeat(2,1fr);}.rooms-grid{grid-template-columns:1fr;}.health-grid{grid-template-columns:repeat(2,1fr);}.cost-grid{grid-template-columns:1fr;}.container{padding:16px;}}
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="header-left">
+    <div class="logo-icon">🏢</div>
+    <div class="header-title">
+      <h1>HVAC Power Monitor</h1>
+      <p>University of Zimbabwe &nbsp;·&nbsp; Simbarashe Chidarikire</p>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="alert-bell" onclick="toggleAlerts()" title="Alerts">
+      🔔<span class="alert-count" id="alert-count">0</span>
+    </div>
+    <div class="live-badge"><div class="live-dot"></div>LIVE</div>
+    <div class="header-time">⏱ <span id="uptime">00:00:00</span></div>
+    <button class="export-btn" onclick="exportCSV()">⬇ Export CSV</button>
+  </div>
+</header>
+
+<!-- ALERT BANNER -->
+<div class="alert-banner" id="alert-banner">
+  <div class="alert-banner-icon">⚠️</div>
+  <div class="alert-banner-text" id="alert-text">Alert</div>
+  <div class="alert-banner-close" onclick="dismissAlert()">✕</div>
+</div>
+
+<div class="container">
+
+  <!-- SECTION 1: SYSTEM HEALTH -->
+  <div class="section-title"><span>🩺</span> System Health</div>
+  <div class="health-grid fade-in">
+    <div class="health-card">
+      <div class="health-dot online" id="h-firebase"></div>
+      <div><div class="health-name">Firebase</div><div class="health-status" id="h-firebase-txt">Connecting...</div></div>
+    </div>
+    <div class="health-card">
+      <div class="health-dot warn" id="h-pzem"></div>
+      <div><div class="health-name">PZEM Sensor</div><div class="health-status" id="h-pzem-txt">Waiting for data...</div></div>
+    </div>
+    <div class="health-card">
+      <div class="health-dot warn" id="h-r1"></div>
+      <div><div class="health-name">Office A Sensor</div><div class="health-status" id="h-r1-txt">Waiting...</div></div>
+    </div>
+    <div class="health-card">
+      <div class="health-dot warn" id="h-r2"></div>
+      <div><div class="health-name">Office B Sensor</div><div class="health-status" id="h-r2-txt">Waiting...</div></div>
+    </div>
+  </div>
+
+  <!-- SECTION 2: OVERALL SYSTEM READINGS -->
+  <div class="section-title"><span>⚡</span> Overall System Readings</div>
+  <div class="overview-grid">
+    <div class="metric-card blue fade-in">
+      <div class="metric-icon">⚡</div>
+      <div class="metric-label">Voltage</div>
+      <div class="metric-value"><span id="voltage">--</span><span class="metric-unit"> V</span></div>
+      <div class="metric-sub">AC Line Voltage</div>
+    </div>
+    <div class="metric-card green fade-in">
+      <div class="metric-icon">〜</div>
+      <div class="metric-label">Current</div>
+      <div class="metric-value"><span id="current">--</span><span class="metric-unit"> A</span></div>
+      <div class="metric-sub">Total Draw</div>
+    </div>
+    <div class="metric-card amber fade-in">
+      <div class="metric-icon">◈</div>
+      <div class="metric-label">Active Power</div>
+      <div class="metric-value"><span id="power">--</span><span class="metric-unit"> W</span></div>
+      <div class="metric-sub">Real Power</div>
+    </div>
+    <div class="metric-card teal fade-in">
+      <div class="metric-icon">∑</div>
+      <div class="metric-label">Energy Used</div>
+      <div class="metric-value"><span id="energy">--</span><span class="metric-unit"> kWh</span></div>
+      <div class="metric-sub">Cumulative Total</div>
+    </div>
+    <div class="metric-card violet fade-in">
+      <div class="metric-icon">Hz</div>
+      <div class="metric-label">Frequency</div>
+      <div class="metric-value"><span id="frequency">--</span><span class="metric-unit"> Hz</span></div>
+      <div class="metric-sub">AC Frequency</div>
+    </div>
+    <div class="metric-card orange fade-in">
+      <div class="metric-icon">φ</div>
+      <div class="metric-label">Power Factor</div>
+      <div class="metric-value"><span id="pf">--</span></div>
+      <div class="metric-sub">Efficiency Ratio</div>
+    </div>
+    <div class="metric-card fade-in" id="volt-gauge-card" style="border-top:3px solid var(--green);">
+      <div class="metric-icon" id="volt-gauge-icon" style="background:var(--green-light);color:var(--green);">✔</div>
+      <div class="metric-label">Voltage Health</div>
+      <div class="metric-value" style="font-size:18px;"><span id="volt-status">--</span></div>
+      <div style="margin-top:8px;height:6px;background:var(--surface2);border-radius:6px;overflow:hidden;">
+        <div id="volt-bar" style="height:100%;border-radius:6px;width:0%;transition:width 1s,background 0.5s;background:var(--green);"></div>
+      </div>
+      <div class="metric-sub"><span id="volt-range">Normal: 210–240V</span></div>
+    </div>
+  </div>
+
+  <!-- LOAD BAR -->
+  <div class="load-bar-wrap fade-in">
+    <div class="load-bar-header">
+      <span class="load-bar-title">⚙️ Circuit Load — 16A / 3680W</span>
+      <span class="load-bar-pct"><span id="load-pct">0.0</span>%</span>
+    </div>
+    <div class="load-bar-track">
+      <div class="load-bar-fill" id="load-bar"></div>
+    </div>
+    <div class="load-bar-sub">
+      <span><span id="load-watts">0</span> W used</span>
+      <span>3680 W available</span>
+    </div>
+  </div>
+
+  <!-- SECTION 3: ENERGY COST ESTIMATOR -->
+  <div class="section-title"><span>💰</span> Energy Cost Estimator</div>
+  <div class="cost-grid fade-in">
+    <div class="cost-card">
+      <div class="cost-icon">⚡</div>
+      <div class="cost-label">Energy Consumed</div>
+      <div class="cost-value"><span id="cost-energy">0.000</span><span class="cost-unit"> kWh</span></div>
+      <div class="cost-note">Cumulative reading</div>
+    </div>
+    <div class="cost-card">
+      <div class="cost-icon">💵</div>
+      <div class="cost-label">Estimated Cost (USD)</div>
+      <div class="cost-value">$<span id="cost-usd">0.00</span></div>
+      <div class="cost-note">@ $0.098 / kWh (ZETDC rate)</div>
+    </div>
+    <div class="cost-card" style="border-top:3px solid var(--green);">
+      <div class="cost-icon">🌿</div>
+      <div class="cost-label">Energy Saved (Smart vs Always-On)</div>
+      <div class="cost-value" style="color:var(--green);">$<span id="saved-usd">0.000</span></div>
+      <div class="cost-note">Office hrs 08:00–17:00 baseline (9h/day)</div>
+      <div style="margin-top:6px;font-size:10px;color:var(--text3);">Saved: <span id="saved-kwh">0.000</span> kWh &nbsp;|&nbsp; ZWL <span id="saved-zwl">0.00</span></div>
+    </div>
+  </div>
+
+  <!-- SECTION 4: LIVE ROOM READINGS -->
+  <div class="section-title"><span>🏠</span> Live Room Readings &amp; Controls</div>
+  <div class="rooms-grid">
+
+    <!-- ROOM 1 -->
+    <div class="room-card room-1 fade-in">
+      <div class="room-header">
+        <div class="room-header-left">
+          <div class="room-number">1</div>
+          <div>
+            <div class="room-name">Room 1</div>
+            <div class="room-sub">Office A</div>
+          </div>
+        </div>
+        <div class="room-badges">
+          <span class="badge badge-empty" id="r1-occ-badge">EMPTY</span>
+          <button class="mode-btn auto" id="r1-mode-btn" onclick="toggleMode(1)">AUTO</button>
+        </div>
+      </div>
+      <div class="room-body">
+        <div class="room-readings">
+          <div class="room-reading">
+            <div class="room-reading-label">Voltage</div>
+            <div class="room-reading-value"><span id="r1-voltage">--</span><span class="room-reading-unit"> V</span></div>
+          </div>
+          <div class="room-reading">
+            <div class="room-reading-label">Current</div>
+            <div class="room-reading-value"><span id="r1-current">--</span><span class="room-reading-unit"> A</span></div>
+          </div>
+          <div class="room-reading">
+            <div class="room-reading-label">Power</div>
+            <div class="room-reading-value"><span id="r1-power">--</span><span class="room-reading-unit"> W</span></div>
+          </div>
+          <div class="room-reading">
+            <div class="room-reading-label">Energy</div>
+            <div class="room-reading-value"><span id="r1-energy">--</span><span class="room-reading-unit"> kWh</span></div>
+          </div>
+        </div>
+        <div class="last-motion" id="r1-last-motion">🕐 <strong>Last Detection:</strong> Waiting for data...</div>
+        <div class="room-controls">
+          <div class="control-row">
+            <div class="control-left">
+              <div class="control-icon" style="background:var(--amber-light);color:var(--amber);">💡</div>
+              <div>
+                <div class="control-name">Bulb</div>
+                <div class="control-state" id="r1-bulb-state" style="color:var(--text3)">OFF</div>
+              </div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="r1-bulb-toggle" onchange="toggleDevice('room1','manualBulb',this.checked)">
+              <div class="toggle-track"></div>
+              <div class="toggle-thumb"></div>
+            </label>
+          </div>
+          <div class="control-row">
+            <div class="control-left">
+              <div class="control-icon" style="background:var(--teal-light);color:var(--teal);">🌀</div>
+              <div>
+                <div class="control-name">Socket / Fan</div>
+                <div class="control-state" id="r1-socket-state" style="color:var(--text3)">OFF</div>
+              </div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="r1-socket-toggle" onchange="toggleDevice('room1','manualSocket',this.checked)">
+              <div class="toggle-track"></div>
+              <div class="toggle-thumb"></div>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ROOM 2 -->
+    <div class="room-card room-2 fade-in">
+      <div class="room-header">
+        <div class="room-header-left">
+          <div class="room-number">2</div>
+          <div>
+            <div class="room-name">Room 2</div>
+            <div class="room-sub">Office B</div>
+          </div>
+        </div>
+        <div class="room-badges">
+          <span class="badge badge-empty" id="r2-occ-badge">EMPTY</span>
+          <button class="mode-btn auto" id="r2-mode-btn" onclick="toggleMode(2)">AUTO</button>
+        </div>
+      </div>
+      <div class="room-body">
+        <div class="room-readings">
+          <div class="room-reading">
+            <div class="room-reading-label">Voltage</div>
+            <div class="room-reading-value"><span id="r2-voltage">--</span><span class="room-reading-unit"> V</span></div>
+          </div>
+          <div class="room-reading">
+            <div class="room-reading-label">Current</div>
+            <div class="room-reading-value"><span id="r2-current">--</span><span class="room-reading-unit"> A</span></div>
+          </div>
+          <div class="room-reading">
+            <div class="room-reading-label">Power</div>
+            <div class="room-reading-value"><span id="r2-power">--</span><span class="room-reading-unit"> W</span></div>
+          </div>
+          <div class="room-reading">
+            <div class="room-reading-label">Energy</div>
+            <div class="room-reading-value"><span id="r2-energy">--</span><span class="room-reading-unit"> kWh</span></div>
+          </div>
+        </div>
+        <div class="last-motion" id="r2-last-motion">🕐 <strong>Last Detection:</strong> Waiting for data...</div>
+        <div class="room-controls">
+          <div class="control-row">
+            <div class="control-left">
+              <div class="control-icon" style="background:var(--amber-light);color:var(--amber);">💡</div>
+              <div>
+                <div class="control-name">Bulb</div>
+                <div class="control-state" id="r2-bulb-state" style="color:var(--text3)">OFF</div>
+              </div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="r2-bulb-toggle" onchange="toggleDevice('room2','manualBulb',this.checked)">
+              <div class="toggle-track"></div>
+              <div class="toggle-thumb"></div>
+            </label>
+          </div>
+          <div class="control-row">
+            <div class="control-left">
+              <div class="control-icon" style="background:var(--teal-light);color:var(--teal);">🌀</div>
+              <div>
+                <div class="control-name">Socket / Fan</div>
+                <div class="control-state" id="r2-socket-state" style="color:var(--text3)">OFF</div>
+              </div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="r2-socket-toggle" onchange="toggleDevice('room2','manualSocket',this.checked)">
+              <div class="toggle-track"></div>
+              <div class="toggle-thumb"></div>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 5: POWER HISTORY CHART + DAILY SUMMARY -->
+  <div class="section-title"><span>📈</span> Power History &amp; Daily Summary</div>
+  <div class="chart-grid fade-in">
+    <div class="chart-card">
+      <div class="chart-header">
+        <div>
+          <div class="chart-title">Power Consumption Over Time</div>
+          <div class="chart-sub">Last 30 readings — updates every 3 seconds</div>
+        </div>
+      </div>
+      <div class="chart-canvas-wrap">
+        <canvas id="powerChart"></canvas>
+      </div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-title">📊 Daily Summary</div>
+      <div class="summary-sub">Statistics since session started</div>
+      <div class="summary-row">
+        <span class="summary-label">Total Energy</span>
+        <span class="summary-val"><span id="sum-energy">0.000</span> kWh</span>
+      </div>
+      <div class="summary-row">
+        <span class="summary-label">Peak Power</span>
+        <span class="summary-val"><span id="sum-peak">0.0</span> W</span>
+      </div>
+      <div class="summary-row">
+        <span class="summary-label">Average Power</span>
+        <span class="summary-val"><span id="sum-avg">0.0</span> W</span>
+      </div>
+      <div class="summary-row">
+        <span class="summary-label">Min Voltage</span>
+        <span class="summary-val"><span id="sum-minv">--</span> V</span>
+      </div>
+      <div class="summary-row">
+        <span class="summary-label">Max Voltage</span>
+        <span class="summary-val"><span id="sum-maxv">--</span> V</span>
+      </div>
+      <div class="summary-row">
+        <span class="summary-label">Avg Power Factor</span>
+        <span class="summary-val"><span id="sum-pf">--</span></span>
+      </div>
+      <div class="summary-row">
+        <span class="summary-label">Data Points</span>
+        <span class="summary-val"><span id="sum-pts">0</span></span>
+      </div>
+    </div>
+  </div>
+  <!-- OCCUPANCY TIMELINE -->
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px 24px;margin-top:16px;">
+    <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;">🗓 Occupancy Timeline</div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:14px;">Session events — each block represents a detected occupancy event</div>
+    <div style="margin-bottom:10px;">
+      <div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:6px;">Office A (Room 1)</div>
+      <div id="timeline-r1" style="display:flex;flex-wrap:wrap;gap:4px;min-height:24px;align-items:center;">
+        <span style="font-size:11px;color:var(--text3);font-style:italic;">No events yet</span>
+      </div>
+    </div>
+    <div>
+      <div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:6px;">Office B (Room 2)</div>
+      <div id="timeline-r2" style="display:flex;flex-wrap:wrap;gap:4px;min-height:24px;align-items:center;">
+        <span style="font-size:11px;color:var(--text3);font-style:italic;">No events yet</span>
+      </div>
+    </div>
+    <div style="margin-top:10px;font-size:10px;color:var(--text3);display:flex;gap:16px;">
+      <span><span style="display:inline-block;width:12px;height:12px;background:var(--blue);border-radius:3px;vertical-align:middle;margin-right:4px;"></span>Office A occupied</span>
+      <span><span style="display:inline-block;width:12px;height:12px;background:var(--teal);border-radius:3px;vertical-align:middle;margin-right:4px;"></span>Office B occupied</span>
+    </div>
+  </div>
+
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <strong>HVAC Automated Room Control System</strong> &nbsp;·&nbsp; Last updated: <span id="footer-time">--</span>
+</footer>
+
+<script>
+// ── FIREBASE ──
+const firebaseConfig = {
+  apiKey:      "AIzaSyAblAKHcGvvDZyVnnK-aOMnyuEvB6sSRA4",
+  databaseURL: "https://hvacsystem-efaf3-default-rtdb.firebaseio.com"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+// ── STATE ──
+const startTime = Date.now();
+let alerts = [];
+let powerHistory = [];
+let timeHistory  = [];
+let powerSum = 0, powerCount = 0, peakPower = 0;
+let minVolt = Infinity, maxVolt = -Infinity;
+let pfSum = 0, pfCount = 0;
+let csvData = [['Time','Voltage(V)','Current(A)','Power(W)','Energy(kWh)','Frequency(Hz)','PF','R1_Occupied','R2_Occupied']];
+let r1LastMotionTime = null;
+let r2LastMotionTime = null;
+let r1CycleStart = null;   // when current 30s occupied cycle started
+let r2CycleStart = null;
+let prevR1Occ = false;
+let prevR2Occ = false;
+const TARIFF_USD = 0.098;
+const ZWL_RATE   = 360;
+const OFFICE_HRS = 9;   // 08:00-17:00
+const BASELINE_W = 100; // assumed always-on load per room (W) without smart system
+let sessionHours = 0;
+let r1OccupiedSeconds = 0, r2OccupiedSeconds = 0;
+let lastTickTime = Date.now();
+let r1TimelineEvents = [], r2TimelineEvents = [];
+
+// ── CHART SETUP ──
+const ctx = document.getElementById('powerChart').getContext('2d');
+const powerChart = new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels: [],
+    datasets: [{
+      label: 'Power (W)',
+      data: [],
+      borderColor: '#2563EB',
+      backgroundColor: 'rgba(37,99,235,0.08)',
+      borderWidth: 2,
+      pointRadius: 2,
+      pointBackgroundColor: '#2563EB',
+      fill: true,
+      tension: 0.4
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { grid: { color: '#E8EFF7' }, ticks: { font: { size: 10 }, color: '#7A90A8', maxTicksLimit: 8 } },
+      y: { grid: { color: '#E8EFF7' }, ticks: { font: { size: 10 }, color: '#7A90A8' }, beginAtZero: true }
+    }
+  }
+});
+
+// ── UPTIME ──
+setInterval(() => {
+  const e = Math.floor((Date.now() - startTime) / 1000);
+  const h = String(Math.floor(e/3600)).padStart(2,'0');
+  const m = String(Math.floor((e%3600)/60)).padStart(2,'0');
+  const s = String(e%60).padStart(2,'0');
+  document.getElementById('uptime').textContent = `${h}:${m}:${s}`;
+  document.getElementById('footer-time').textContent = new Date().toLocaleString();
+  updateLastMotionDisplay();
+  // Track occupied seconds for savings
+  const tickNow = Date.now();
+  const tickDelta = (tickNow - lastTickTime) / 1000;
+  lastTickTime = tickNow;
+  if (prevR1Occ) r1OccupiedSeconds += tickDelta;
+  if (prevR2Occ) r2OccupiedSeconds += tickDelta;
+  sessionHours = (tickNow - startTime) / 3600000;
+  updateSavings();
+}, 1000);
+
+// ── LAST DETECTION DISPLAY ──
+// When OCCUPIED: counts up to 30s then resets back to 0 (renewal cycle)
+// When EMPTY: continues counting up showing time since last detection
+function updateLastMotionDisplay() {
+  const now = Date.now();
+
+  // ROOM 1
+  if (r1CycleStart !== null && prevR1Occ) {
+    // Room occupied — count up within 30s cycle, reset when cycle completes
+    let elapsed = Math.floor((now - r1CycleStart) / 1000);
+    if (elapsed >= 30) {
+      r1CycleStart = now;  // renew cycle
+      elapsed = 0;
+    }
+    document.getElementById('r1-last-motion').innerHTML =
+      `🟢 <strong>Occupied:</strong> ${elapsed}s / 30s — renewing`;
+  } else if (r1LastMotionTime !== null && !prevR1Occ) {
+    // Room empty — count how long since last detection
+    const ago = Math.floor((now - r1LastMotionTime) / 1000);
+    const txt = ago < 60 ? `${ago}s ago` : ago < 3600 ? `${Math.floor(ago/60)}m ${ago%60}s ago` : `${Math.floor(ago/3600)}h ago`;
+    document.getElementById('r1-last-motion').innerHTML =
+      `🔴 <strong>Last Detection:</strong> ${txt}`;
+  }
+
+  // ROOM 2
+  if (r2CycleStart !== null && prevR2Occ) {
+    let elapsed = Math.floor((now - r2CycleStart) / 1000);
+    if (elapsed >= 30) {
+      r2CycleStart = now;
+      elapsed = 0;
+    }
+    document.getElementById('r2-last-motion').innerHTML =
+      `🟢 <strong>Occupied:</strong> ${elapsed}s / 30s — renewing`;
+  } else if (r2LastMotionTime !== null && !prevR2Occ) {
+    const ago = Math.floor((now - r2LastMotionTime) / 1000);
+    const txt = ago < 60 ? `${ago}s ago` : ago < 3600 ? `${Math.floor(ago/60)}m ${ago%60}s ago` : `${Math.floor(ago/3600)}h ago`;
+    document.getElementById('r2-last-motion').innerHTML =
+      `🔴 <strong>Last Detection:</strong> ${txt}`;
+  }
+}
+
+// ── HELPERS ──
+function setVal(id, val) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (el.textContent !== String(val)) {
+    el.textContent = val;
+    el.classList.remove('val-flash');
+    void el.offsetWidth;
+    el.classList.add('val-flash');
+  }
+}
+
+function setBadge(id, isOcc) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = isOcc ? 'OCCUPIED' : 'EMPTY';
+  el.className = `badge ${isOcc ? 'badge-occupied' : 'badge-empty'}`;
+}
+
+function setToggle(id, state) {
+  const el = document.getElementById(id);
+  if (el) el.checked = state;
+}
+
+function setControlState(id, isOn) {
+  const el = document.getElementById(id);
+  if (el) { el.textContent = isOn ? 'ON' : 'OFF'; el.style.color = isOn ? 'var(--green)' : 'var(--text3)'; }
+}
+
+function setModeBtn(btnId, isAuto) {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  btn.textContent = isAuto ? 'AUTO' : 'MANUAL';
+  btn.className = `mode-btn ${isAuto ? 'auto' : 'manual'}`;
+}
+
+function setHealth(dotId, txtId, status, msg) {
+  const dot = document.getElementById(dotId);
+  const txt = document.getElementById(txtId);
+  if (dot) dot.className = `health-dot ${status}`;
+  if (txt) txt.textContent = msg;
+}
+
+// ── ALERTS ──
+function showAlert(msg) {
+  const banner = document.getElementById('alert-banner');
+  document.getElementById('alert-text').textContent = msg;
+  banner.classList.add('show');
+  alerts.push(msg);
+  document.getElementById('alert-count').textContent = alerts.length;
+}
+
+function dismissAlert() {
+  document.getElementById('alert-banner').classList.remove('show');
+}
+
+function toggleAlerts() {
+  const banner = document.getElementById('alert-banner');
+  if (alerts.length > 0) banner.classList.toggle('show');
+}
+
+// ── VOLTAGE GAUGE ──
+function updateVoltGauge(v) {
+  const card = document.getElementById("volt-gauge-card");
+  const icon = document.getElementById("volt-gauge-icon");
+  const status = document.getElementById("volt-status");
+  const bar = document.getElementById("volt-bar");
+  const range = document.getElementById("volt-range");
+  const pct = Math.min(Math.max(((v - 190) / 60) * 100, 0), 100);
+  bar.style.width = pct + "%";
+  if (v >= 210 && v <= 240) {
+    card.style.borderTop = "3px solid var(--green)";
+    icon.style.background = "var(--green-light)"; icon.style.color = "var(--green)"; icon.textContent = "✔";
+    bar.style.background = "var(--green)"; status.textContent = "Normal";
+    range.textContent = v.toFixed(1) + "V — Good";
+  } else if ((v >= 200 && v < 210) || (v > 240 && v <= 250)) {
+    card.style.borderTop = "3px solid var(--amber)";
+    icon.style.background = "var(--amber-light)"; icon.style.color = "var(--amber)"; icon.textContent = "⚠";
+    bar.style.background = "var(--amber)"; status.textContent = "Warning";
+    range.textContent = v.toFixed(1) + "V — Check supply";
+  } else {
+    card.style.borderTop = "3px solid var(--red)";
+    icon.style.background = "var(--red-light)"; icon.style.color = "var(--red)"; icon.textContent = "✕";
+    bar.style.background = "var(--red)"; status.textContent = "Critical";
+    range.textContent = v.toFixed(1) + "V — Danger";
+  }
+}
+
+// ── SAVINGS ESTIMATOR ──
+// Baseline: both rooms always on for 9 office hours at BASELINE_W each
+// Smart: only on when occupied (tracked in r1OccupiedSeconds)
+function updateSavings() {
+  const baselineKwh = (2 * BASELINE_W * OFFICE_HRS) / 1000;
+  const smartKwh = ((r1OccupiedSeconds + r2OccupiedSeconds) * BASELINE_W) / 3600000;
+  const savedKwh = Math.max(baselineKwh - smartKwh, 0);
+  const savedUSD = savedKwh * TARIFF_USD;
+  const savedZWL = savedUSD * ZWL_RATE;
+  const el1 = document.getElementById("saved-usd");
+  const el2 = document.getElementById("saved-kwh");
+  const el3 = document.getElementById("saved-zwl");
+  if (el1) el1.textContent = savedUSD.toFixed(4);
+  if (el2) el2.textContent = savedKwh.toFixed(3);
+  if (el3) el3.textContent = savedZWL.toFixed(2);
+}
+
+// ── OCCUPANCY TIMELINE ──
+function addTimelineEvent(room, time) {
+  const id = room === 1 ? "timeline-r1" : "timeline-r2";
+  const color = room === 1 ? "var(--blue)" : "var(--teal)";
+  const container = document.getElementById(id);
+  if (!container) return;
+  // Remove placeholder text
+  const placeholder = container.querySelector("span");
+  if (placeholder && placeholder.style.fontStyle === "italic") container.innerHTML = "";
+  const block = document.createElement("div");
+  block.title = "Detected at " + time;
+  block.style.cssText = "background:" + color + ";color:white;font-size:9px;font-family:DM Mono,monospace;padding:3px 7px;border-radius:4px;white-space:nowrap;";
+  block.textContent = time;
+  container.appendChild(block);
+}
+// ── FIREBASE LISTENER ──
+db.ref('/hvac').on('value', snap => {
+  const d = snap.val();
+  if (!d) return;
+
+  setHealth('h-firebase','h-firebase-txt','online','Connected ✓');
+
+  // PZEM
+  const pz = d.pzem || {};
+  const v  = pz.voltage   !== undefined ? Number(pz.voltage).toFixed(1)   : '--';
+  const c  = pz.current   !== undefined ? Number(pz.current).toFixed(2)   : '--';
+  const p  = pz.power     !== undefined ? Number(pz.power).toFixed(1)     : '--';
+  const e  = pz.energy    !== undefined ? Number(pz.energy).toFixed(3)    : '--';
+  const f  = pz.frequency !== undefined ? Number(pz.frequency).toFixed(1) : '--';
+  const pf = pz.pf        !== undefined ? Number(pz.pf).toFixed(2)        : '--';
+
+  setVal('voltage',v); setVal('current',c); setVal('power',p);
+  if (pz.voltage) updateVoltGauge(Number(pz.voltage));
+  setVal('energy',e);  setVal('frequency',f); setVal('pf',pf);
+  setVal('r1-voltage',v); setVal('r1-current',c); setVal('r1-power',p); setVal('r1-energy',e);
+  setVal('r2-voltage',v); setVal('r2-current',c); setVal('r2-power',p); setVal('r2-energy',e);
+
+  if (pz.voltage !== undefined) setHealth('h-pzem','h-pzem-txt','online','Reading data ✓');
+
+  // LOAD BAR
+  const pw = pz.power || 0;
+  const pct = Math.min((pw / 3680) * 100, 100).toFixed(1);
+  const bar = document.getElementById('load-bar');
+  bar.style.width = pct + '%';
+  bar.className = 'load-bar-fill' + (pct > 80 ? ' danger' : pct > 60 ? ' warn' : '');
+  document.getElementById('load-pct').textContent = pct;
+  document.getElementById('load-watts').textContent = pw.toFixed(1);
+
+  // COST
+  const en = pz.energy || 0;
+  document.getElementById('cost-energy').textContent = en.toFixed(3);
+  document.getElementById('cost-usd').textContent = (en * TARIFF_USD).toFixed(4);
+
+  // CHART & STATS
+  const now = new Date();
+  const timeLabel = now.getHours().toString().padStart(2,'0') + ':' +
+                    now.getMinutes().toString().padStart(2,'0') + ':' +
+                    now.getSeconds().toString().padStart(2,'0');
+  powerHistory.push(pw);
+  timeHistory.push(timeLabel);
+  if (powerHistory.length > 30) { powerHistory.shift(); timeHistory.shift(); }
+  powerChart.data.labels = timeHistory;
+  powerChart.data.datasets[0].data = powerHistory;
+  powerChart.update('none');
+
+  powerSum += pw; powerCount++;
+  if (pw > peakPower) peakPower = pw;
+  const vn = pz.voltage || 0;
+  if (vn > 0) { if (vn < minVolt) minVolt = vn; if (vn > maxVolt) maxVolt = vn; }
+  const pfn = pz.pf || 0;
+  if (pfn > 0) { pfSum += pfn; pfCount++; }
+
+  setVal('sum-energy', en.toFixed(3));
+  setVal('sum-peak',   peakPower.toFixed(1));
+  setVal('sum-avg',    powerCount > 0 ? (powerSum/powerCount).toFixed(1) : '0.0');
+  setVal('sum-minv',   minVolt === Infinity ? '--' : minVolt.toFixed(1));
+  setVal('sum-maxv',   maxVolt === -Infinity ? '--' : maxVolt.toFixed(1));
+  setVal('sum-pf',     pfCount > 0 ? (pfSum/pfCount).toFixed(2) : '--');
+  setVal('sum-pts',    powerCount);
+
+  // ALERTS
+  if (pz.voltage && pz.voltage < 200) showAlert(`⚠️ Low voltage detected: ${pz.voltage.toFixed(1)}V — Check power supply`);
+  if (pz.voltage && pz.voltage > 250) showAlert(`⚠️ High voltage detected: ${pz.voltage.toFixed(1)}V — Possible surge`);
+  if (pw > 2944) showAlert(`⚠️ High load: ${pw.toFixed(0)}W — Circuit at ${pct}% capacity`);
+
+  // CSV LOG
+  csvData.push([timeLabel, v, c, p, e, f, pf,
+    d.room1?.occupied ? 'YES' : 'NO',
+    d.room2?.occupied ? 'YES' : 'NO'
+  ]);
+
+  // ROOM 1
+  const r1 = d.room1 || {};
+  const r1occ  = !!r1.occupied;
+  const r1bulb = !!r1.bulbState;
+  const r1skt  = !!r1.socketState;
+  const r1auto = r1.autoMode !== undefined ? !!r1.autoMode : true;
+
+  if (r1occ && !prevR1Occ) {
+    r1LastMotionTime = Date.now();
+    r1CycleStart = Date.now();
+    addTimelineEvent(1, new Date().toLocaleTimeString());
+    setHealth('h-r1','h-r1-txt','online','Active — occupant detected');
+  } else if (r1occ && prevR1Occ) {
+    setHealth('h-r1','h-r1-txt','online','Active — occupant detected');
+  } else if (!r1occ && prevR1Occ) {
+    r1LastMotionTime = Date.now();
+    r1CycleStart = null;
+    setHealth('h-r1','h-r1-txt','online','Active — no occupant');
+  } else if (!r1occ && !prevR1Occ && r1LastMotionTime) {
+    setHealth('h-r1','h-r1-txt','online','Active — no occupant');
+  } else if (!r1LastMotionTime) {
+    setHealth('h-r1','h-r1-txt','warn','Monitoring...');
+  }
+  prevR1Occ = r1occ;
+
+  setBadge('r1-occ-badge', r1occ);
+  setModeBtn('r1-mode-btn', r1auto);
+  setToggle('r1-bulb-toggle', r1bulb);
+  setToggle('r1-socket-toggle', r1skt);
+  setControlState('r1-bulb-state', r1bulb);
+  setControlState('r1-socket-state', r1skt);
+
+  // ROOM 2
+  const r2 = d.room2 || {};
+  const r2occ  = !!r2.occupied;
+  const r2bulb = !!r2.bulbState;
+  const r2skt  = !!r2.socketState;
+  const r2auto = r2.autoMode !== undefined ? !!r2.autoMode : true;
+
+  if (r2occ && !prevR2Occ) {
+    r2LastMotionTime = Date.now();
+    r2CycleStart = Date.now();
+    addTimelineEvent(2, new Date().toLocaleTimeString());
+    setHealth('h-r2','h-r2-txt','online','Active — occupant detected');
+  } else if (r2occ && prevR2Occ) {
+    setHealth('h-r2','h-r2-txt','online','Active — occupant detected');
+  } else if (!r2occ && prevR2Occ) {
+    r2LastMotionTime = Date.now();
+    r2CycleStart = null;
+    setHealth('h-r2','h-r2-txt','online','Active — no occupant');
+  } else if (!r2occ && !prevR2Occ && r2LastMotionTime) {
+    setHealth('h-r2','h-r2-txt','online','Active — no occupant');
+  } else if (!r2LastMotionTime) {
+    setHealth('h-r2','h-r2-txt','warn','Monitoring...');
+  }
+  prevR2Occ = r2occ;
+
+  setBadge('r2-occ-badge', r2occ);
+  setModeBtn('r2-mode-btn', r2auto);
+  setToggle('r2-bulb-toggle', r2bulb);
+  setToggle('r2-socket-toggle', r2skt);
+  setControlState('r2-bulb-state', r2bulb);
+  setControlState('r2-socket-state', r2skt);
+});
+
+// ── TOGGLE MODE ──
+function toggleMode(room) {
+  const btn = document.getElementById(`r${room}-mode-btn`);
+  const isAuto = btn.textContent.trim() === 'AUTO';
+  db.ref(`/hvac/room${room}/autoMode`).set(!isAuto);
+}
+
+// ── TOGGLE DEVICE ──
+function toggleDevice(room, key, val) {
+  db.ref(`/hvac/${room}/${key}`).set(val);
+}
+
+// ── EXPORT CSV ──
+function exportCSV() {
+  const rows = csvData.map(r => r.join(',')).join('\n');
+  const blob = new Blob([rows], { type: 'text/csv' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `hvac_data_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>
